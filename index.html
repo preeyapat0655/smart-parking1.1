@@ -1,0 +1,252 @@
+```html
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Smart Parking System</title>
+
+<style>
+body{
+    font-family: Arial;
+    text-align:center;
+    background:#f0f2f5;
+}
+
+h1{
+    margin-top:20px;
+}
+
+.parking{
+    display:grid;
+    grid-template-columns:repeat(2,200px);
+    gap:20px;
+    justify-content:center;
+    margin-top:30px;
+}
+
+.slot{
+    height:150px;
+    border-radius:15px;
+    color:white;
+    display:flex;
+    flex-direction:column;
+    justify-content:center;
+    align-items:center;
+    font-size:20px;
+    font-weight:bold;
+    cursor:pointer;
+}
+
+.empty{
+    background:green;
+}
+
+.reserved{
+    background:orange;
+}
+
+.occupied{
+    background:red;
+}
+
+.small{
+    font-size:13px;
+    margin-top:5px;
+}
+</style>
+
+</head>
+<body>
+
+<h1>🚗 SMART PARKING SYSTEM</h1>
+
+<div class="parking">
+    <div id="A1" class="slot"></div>
+    <div id="A2" class="slot"></div>
+    <div id="A3" class="slot"></div>
+    <div id="A4" class="slot"></div>
+</div>
+
+<script type="module">
+
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import {
+    getDatabase,
+    ref,
+    onValue,
+    runTransaction
+}
+from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+
+const firebaseConfig = {
+  apiKey: "YOUR_API_KEY",
+  authDomain: "oooooo-57092.firebaseapp.com",
+  databaseURL: "https://oooooo-57092-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "oooooo-57092"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
+
+// user id ประจำเครื่อง
+const myId =
+localStorage.getItem("userId")
+||
+Math.random().toString(36).substring(2);
+
+localStorage.setItem("userId",myId);
+
+// เก็บข้อมูลทุกช่อง
+let allParkingData = {};
+
+onValue(ref(db,"Parking"),(snap)=>{
+    allParkingData = snap.val() || {};
+});
+
+// จอง / ยกเลิก
+function toggleParking(slot){
+
+    const slotRef = ref(db,"Parking/"+slot);
+
+    runTransaction(slotRef,(data)=>{
+
+        if(!data){
+            return {
+                status:"reserved",
+                owner:myId,
+                startTime:Date.now()
+            };
+        }
+
+        // รถจอดแล้ว
+        if(data.status === "occupied"){
+            return data;
+        }
+
+        // จองแล้ว
+        if(data.status === "reserved"){
+
+            // เจ้าของยกเลิกได้
+            if(data.owner === myId){
+                return {
+                    status:"empty",
+                    owner:"",
+                    startTime:0
+                };
+            }
+
+            return data;
+        }
+
+        // ช่องว่าง
+        if(data.status === "empty"){
+
+            // เช็คว่าจองช่องอื่นอยู่ไหม
+            for(const key in allParkingData){
+
+                const item = allParkingData[key];
+
+                if(
+                    item &&
+                    item.status === "reserved" &&
+                    item.owner === myId
+                ){
+                    alert("คุณจองได้เพียง 1 ช่องเท่านั้น");
+                    return data;
+                }
+            }
+
+            return {
+                status:"reserved",
+                owner:myId,
+                startTime:Date.now()
+            };
+        }
+
+        return data;
+    });
+
+}
+
+window.toggleParking = toggleParking;
+
+// realtime
+["A1","A2","A3","A4"].forEach(slot=>{
+
+    onValue(ref(db,"Parking/"+slot),(snap)=>{
+
+        const data = snap.val();
+        const div = document.getElementById(slot);
+
+        if(!data){
+            div.className="slot empty";
+            div.innerHTML=`
+                <div>${slot}</div>
+                <div>🟢 ว่าง</div>
+            `;
+            div.onclick=()=>toggleParking(slot);
+            return;
+        }
+
+        const isOwner =
+        data.owner === myId;
+
+        // ไม่ว่าง
+        if(data.status==="occupied"){
+
+            div.className="slot occupied";
+
+            div.innerHTML=`
+                <div>${slot}</div>
+                <div>🔴 ไม่ว่าง</div>
+            `;
+
+            div.onclick=null;
+        }
+
+        // จองแล้ว
+        else if(data.status==="reserved"){
+
+            div.className="slot reserved";
+
+            div.innerHTML=`
+                <div>${slot}</div>
+                <div>🟡 จองแล้ว</div>
+                <div class="small">
+                    ${
+                    isOwner
+                    ? "👤 ของคุณ (กดยกเลิกได้)"
+                    : "🔒 คนอื่นจองอยู่"
+                    }
+                </div>
+            `;
+
+            div.onclick =
+            isOwner
+            ? ()=>toggleParking(slot)
+            : null;
+        }
+
+        // ว่าง
+        else{
+
+            div.className="slot empty";
+
+            div.innerHTML=`
+                <div>${slot}</div>
+                <div>🟢 ว่าง</div>
+            `;
+
+            div.onclick=
+            ()=>toggleParking(slot);
+        }
+
+    });
+
+});
+
+</script>
+
+</body>
+</html>
+```
